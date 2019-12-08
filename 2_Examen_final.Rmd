@@ -1,0 +1,125 @@
+
+
+```{r}
+library(tidyverse)
+```
+
+## 2. Muestreo Directo de la Distribución Posterior**
+
+Sea la distribución objetivo sin normalizar la siguiente distribución posterior sin normalizar
+$$ p(x|\theta) \times p(\theta) = 0.75 \times e^{-\frac{1}{2}(\theta-3)^2} + 0.25 \times e^{-\frac{1}{4}(\theta-6)^2}$$
+Asuma que la distribución propuesta $g(\theta)$ está dada por la distribución normal  $N(4,3^2)$.
+
+Demuestre que la distribución propuesta domina a la distribución objetivo (posterior) como sigue:
+
+**a. Calcule de manera analítica el número $M$ mínimo tal que  $M \times g(\theta) \ge p(x|\theta) \times p(\theta)$ para todo $\theta$.**
+
+El valor de M se puede encontrar mediante $\theta^*$ que maximice $h(\theta)$
+$$h(\theta)=\frac{p(x|\theta)\times p(\theta)}{g(\theta)} \backepsilon M=h(\theta^*)$$
+**b. Calcule numéricamente el número $M$ mínimo tal que  $M \times g(\theta) \ge p(x|\theta) \times p(\theta)$ para todo $\theta$. (*Sugerencia:* Considere una cuadrícula de valores de $\theta$).**
+
+Siguiendo el procedimiento que describimos en el inciso a, debemos:
+1. Generar distintos valores de $\theta$
+2. Evaluar $h(\theta)$ en estos distintos valores que acabmos de generar
+3. Obtener el valor máximo de $h(\theta)$
+
+---
+
+1. Generar valores de $\theta$
+```{r}
+theta = seq(-50, 50, 0.02)
+sample(theta, 15)
+```
+
+2. Definir distribución posterior sin normalizar
+```{r}
+distribucion_posterior <- 0.75 * exp(-(1/2) *(theta - 3)^2) + 0.25 * exp(- (1/4) * (theta - 6)^2)
+```
+
+3. Definir distribución propuesta $g(\theta)$ data por $N(4, 3^2)$
+```{r}
+g_propuesta <- dnorm(theta, 4, 3)
+```
+
+4. Evaluar $h(\theta)$ dado por $\frac{p(x|\theta)\times p(\theta)}{g(\theta)} = \frac{posterior}{propuesta}$
+```{r}
+h <- distribucion_posterior / g_propuesta
+```
+
+5. Encontrar valor máximo de $h(\theta)$
+```{r}
+M <- max(h)
+M
+```
+
+Vemos que el valor de M es **6.185462**
+
+**c. Grafique en la misma gráfica el logaritmo natural de $M \times g(\theta)$ y el logaritmo natural de $p(x|\theta) \times p(\theta)$.**
+
+```{r}
+df <- data.frame(theta = theta, distribucion_propuesta = g_propuesta, distribucion_posterior = distribucion_posterior)
+ggplot(df) +
+  ggtitle('Gráfica de los logaritmos naturales de las distribuciones escaladas en M') +
+  geom_line(aes(x = theta, y = log(distribucion_posterior), colour="blue"))+
+  geom_line(aes(x = theta, y =log( M*distribucion_propuesta), colour="red")) +
+  ylab("Logaritmos de las distribuciones sin normalizar") +
+  xlab("Theta") +
+  scale_color_discrete(name = "Distribución", labels = c("Propuesta", "Posterior")) 
+  
+```
+
+---
+
+
+d. Simule una muestra de tamaño $10,000$ de la distribución propuesta $g(\theta)$ y utilice el método de muestreo por aceptación y rechazo (**acceptance-rejection-sampling**) para generar una muestra de la distribución posterior $p(\theta|x)$. ¿De qué tamaño es esta última muestra?
+
+```{r}
+obtener_peso_theta <- function (t) {
+  w <- (0.75 * exp(-(1/2) * (t - 3)^2) + 0.25 * exp(-(1/4) * (t - 6)^2))/(M*dnorm(t, 4, 3))
+  w
+}
+```
+
+
+```{r}
+acceptance_rejecting_sampling <- function(sample_size,thetas, theta_weights) {
+  set.seed(290997)
+  #inicialiar vector
+  accepted <- rep(NA, sample_size)
+  for(i in 1:sample_size){
+    #número aleatorio u de una dist. uniforme
+    u <- runif(1)
+    if(u < theta_weights[i]){
+      accepted[i] <- thetas[i]
+    }
+  }
+  accepted[!is.na(accepted)] 
+}
+```
+
+```{r}
+#Simulamar theta y obtener vector de pesos
+n=10000
+thetas <- rnorm(n, 4, 3)
+pesos_thetas <- obtener_peso_theta(thetas)
+distribucion_posterior = acceptance_rejecting_sampling(n, thetas, pesos_thetas)
+length(distribucion_posterior)
+```
+
+La muestra aceptada tiene un tamaño de **$4,570$**
+
+**e. Estime la media y la varianza de la distribución posterior utilizando la muestra generada en el inciso d.**
+
+Media
+```{r}
+media_posterior = mean(distribucion_posterior)
+media_posterior
+```
+Media de la distrubución posterior: **3.948478**
+
+Varianza
+```{r}
+varianza_posterior = var(distribucion_posterior)
+varianza_posterior
+```
+Varianza de la distrubución posterior: **3.207975**
