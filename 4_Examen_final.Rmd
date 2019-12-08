@@ -1,0 +1,226 @@
+---
+title: "Ejercicio 4 - Examen final"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(R2jags)
+```
+
+### 4. Modelos Jerárquicos
+
+En este ejercicio definirás un modelo jerárquico para la incidencia de tumores en grupos de conejos a los que se suministró una medicina. Se realizaron 71 experimentos distintos utilizando la misma medicina.
+
++ Considerando que cada conejo proviene de un experimento distinto, se desea estudiar $\theta_j$, la probabilidad de desarrollar un tumor en el $j$-ésimo grupo; este parámetro variará de grupo en grupo.
+
+Denotaremos por $y_{ij}$ la observación en el $i$-ésimo conejo perteneciente al $j$-ésimo experimento, $y_{ij}$ puede tomar dos valores: 1 indicando que el conejo desarrolló tumor y 0 en el caso contrario.
+
+$$y_{ij}\sim Bernoulli(\theta_j)$$
+
+Adicionalmente se desea estimar el efecto medio de la medicina a lo largo de los grupos $\mu$, por lo que utilizaremos un modelo jerárquico como sigue:
+
+Asignamos la siguiente distribución incial a los parámetros:
+
+$$\theta_j \sim Beta(a,b)$$
+
+
+donde
+$$a=\mu\kappa$$
+
+$$b=(1-\mu)\kappa$$
+
+
+
+
+
+Finalmente asignamos distribuciones iniciales a los hiperparámetros $\mu$ y $\kappa$,
+
+$$\mu \sim Beta(A_{\mu},B_{\mu})$$
+$$\kappa \sim Gamma(S_{\kappa},R_{\kappa})$$
+
+---
+
+**a. Si piensas en este problema como un lanzamiento de monedas, ¿a qué corresponden las monedas y los lanzamientos?**
+
+**La tabla `rabbits.RData` contiene las observaciones de los 71 experimentos, cada renglón corresponde a una observación.**
+
+La base de datos de conejos cuenta con una variable que indica el número de experimento en cuestión y el output de éste: si un conjeo tiene un tumor o no. Si la variable tumor es igual a 1, entonces el conejo desarrolló un tumor. De lo contrario, el conejo no desarrolló tumor.
+
+Dado que tenemos dos posibles outputs nada más, podemos pensar en este experimento como en el lanzamiento de una moneda. En este caso tenemos 71 experimentos, y por lo tanto, visto del punto de vista del lanzamiento de una moneda, estaríamos lanzando 71 monedas.
+
+Cada una de estas 71 monedas se lanzará el número de veces que corresponda el número de conejos que tenemos en cada grupo de control. Cuando el resultado de un lanzamineto sea águila, entonces el conejo que corresponda a dicho lanzamiento habrá desarrollado un tumor.
+
+---
+
+**b. Ajusta un modelo jerárquico como el descrito arriba utilizando una distribución inicial $Beta(1,1)$ y una $Gamma(1,0.1)$ para $\mu$ y $\kappa$, respectivamente. Puedes hacerlo manualmente o puedes utilizar JAGS.**
+
+Utilizaremos JAGS
+
+```{R}
+#leer datos con load
+#Para que esto funcione bien, el notebook y el rabbits.RData deberán estar en el director getwd(). Si no lo están, cambiar el directorio con setwd()
+rabbits <- get(load("rabbits.RData"))
+
+
+modelo_texto <- ' model{
+  for(t in 1:N){
+    y[t] ~ dbern(theta[experimento[t]])
+  }
+  for(j in 1:numero_experimentos){
+    theta[j] ~ dbeta(a, b)
+  }
+  a <- mu * kappa
+  b <- (1 - mu) * kappa
+  mu ~ dbeta(1, 1)
+  kappa ~ dgamma(1, 0.1)
+}
+'
+modelo_jerarquico_ej_4.txt <- modelo_texto
+cat(modelo_jerarquico_ej_4.txt, file = 'modelo_jerarquico_ej_4')
+
+y <- rabbits$tumor
+experimento <- rabbits$experiment
+N <- nrow(rabbits)
+
+#valores iniciales para jags
+jags.inits <- function(){
+  list(
+    "mu" = runif(1, 0.1, 0.9),
+    "kappa" = runif(1, 5, 20)
+  )
+}
+
+jags_fit <- jags(
+  model.file = "modelo_jerarquico_ej_4", # modelo de jags
+  inits = jags.inits, # valores iniciales
+  data = list(y = y , experimento = experimento, numero_experimentos = max(rabbits$experiment),  N = N), # lista con los datos
+  parameters.to.save = c("mu", "kappa", "theta"), # parámetros por guardar
+  n.chains = 3,   # número de cadenas
+  n.iter = 10000,    # número de pasos
+  n.burnin = 1000   # calentamiento de la cadena
+  )
+
+traceplot(jags_fit, varname = c("kappa", "mu"))
+```
+
+
+---
+
+**c. Realiza histogramas de las distribuciones posteriores marginales de $\mu$ y $\kappa$. Comenta tus resultados.**
+
+```{r}
+sims_df <- data.frame(n_sim = 1:jags_fit$BUGSoutput$n.sims,
+  jags_fit$BUGSoutput$sims.matrix) %>% 
+  dplyr::select(-deviance) %>%
+  gather(parametro, value, -n_sim)
+```
+
+
+
+```{R}
+
+# Grafica del parametro kappa
+ggplot(filter(sims_df, parametro == "kappa"), aes(x = value)) +
+  ggtitle('Parámetro kappa', subtitle = 'histograma de la distribución postrior') +
+  geom_histogram() +
+  xlab('count') +
+  ylab('kappa') 
+```
+
+```{r}
+ggplot(filter(sims_df, parametro == "mu"), aes(x = value)) +
+  ggtitle('Parámetro mu', subtitle = 'histograma de la distribución postrior') +
+  geom_histogram(alpha = 0.8) +
+  ylab("count")  + 
+  xlab(expression(mu))
+```
+
+### FALTA COMENTAR ESTOS RESULTADOS!!
+
+---
+
+**d. Ajusta un nuevo modelo utilizando las distribuciones iniciales $Beta(10,10)$ y $Gamma(0.51,0.01)$ para $\mu$ y $\kappa$, respectivamente (lo demás quedará igual).**
+
+
+```{R}
+
+modelo_texto_inciso_d_texto <- ' model{
+  for(t in 1:N){
+    y[t] ~ dbern(theta[experimento[t]])
+  }
+  for(j in 1:numero_experimentos){
+    theta[j] ~ dbeta(a, b)
+  }
+  a <- mu * kappa
+  b <- (1 - mu) * kappa
+  mu ~ dbeta(10, 10)
+  kappa ~ dgamma(0.51, 0.01)
+}
+'
+modelo_jerarquico_ej_4_inciso_d.txt <- modelo_texto_inciso_d_texto
+cat(modelo_jerarquico_ej_4_inciso_d.txt, file = 'modelo_jerarquico_ej_4_inciso_d')
+
+
+y <- rabbits$tumor
+experimento <- rabbits$experiment
+N <- nrow(rabbits)
+
+
+#valores iniciales para jags
+jags.inits <- function(){
+  list(
+    "mu" = runif(1, 0.1, 0.9),
+    "kappa" = runif(1, 5, 20)
+  )
+}
+
+jags_fit_inciso_d <- jags(
+  model.file = "modelo_jerarquico_ej_4_inciso_d", # modelo de jags
+  inits = jags.inits, # valores iniciales
+  data = list(y = y , experimento = experimento, numero_experimentos = max(rabbits$experiment),  N = N), # lista con los datos
+  parameters.to.save = c("mu", "kappa", "theta"), # parámetros por guardar
+  n.chains = 3,   # número de cadenas
+  n.iter = 10000,    # número de pasos
+  n.burnin = 1000   # calentamiento de la cadena
+)
+
+traceplot(jags_fit, varname = c("kappa", "mu"))
+
+
+```
+
+
+---
+
+**e. Realiza una gráfica con las medias posteriores de los parámetros $\theta_j$ bajo los dos escenarios de distribuciones iniciales. En el eje horizontal grafica las medias posteriores del modelo ajustado en el inciso b. y en el eje vertical las medias posteriores del modelo ajustado en en inciso d. ¿Cómo se comparan? ¿A qué se deben las diferencias?**
+
+```{R}
+medias_modelo_1 <- jags_fit$BUGSoutput$summary[grep("theta",rownames(jags_fit$BUGSoutput$summary)),c(1)]
+medias_modelo_2 <- jags_fit_inciso_d$BUGSoutput$summary[grep("theta",rownames(jags_fit_inciso_d$BUGSoutput$summary)),c(1)]
+
+
+df <- data.frame(tibble(medias_modelo_1), tibble(medias_modelo_2))
+
+ggplot(df, aes(x = medias_modelo_1, y = medias_modelo_2)) + 
+  ggtitle('Gráfica de las medias de ambos modelos') +
+  geom_point(color = 'black', shape=3) +
+  xlab('Modelo 1') + 
+  ylab('Modelo 2') +
+  stat_smooth(method = 'lm', color='red', size=0.1)
+```
+
+### FALTA: ¿Cómo se comparan? ¿A qué se deben las diferencias?
+
+
+
+
+
+
+
+
+
+
+
+
+
